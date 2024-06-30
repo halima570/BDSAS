@@ -1,0 +1,123 @@
+#include "DHT.h"
+#include <PubSubClient.h>
+#include <ESP8266WiFi.h>
+ 
+#define DHTPIN D1     // 
+#define mqtt_server "IP server or name " //
+ 
+#define humidity_topic "hum"
+#define temperature_topic "temp"
+ 
+#define wifi_ssid "wifissid"
+#define wifi_password "wifipassword"
+ 
+#define sleepTime 60 // the sleep time (in seconds). This is the time we wait between taking new measurements and publishing
+ 
+#define DHTTYPE DHT11   // DHT 11
+
+
+// Initialize DHT sensor for normal 16mhz 
+DHT dht(DHTPIN, DHTTYPE);
+ 
+// Initialize the wifi client and the mosquitto client
+WiFiClient espClient;
+PubSubClient client(espClient);
+ 
+// variables h, t, and f, for humidity, temperature in celcius and temperature in fahrenheit
+float h;
+float t;
+
+// set up the wifi
+void setup_wifi() {
+  delay(10);
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(wifi_ssid);
+ 
+  WiFi.begin(wifi_ssid, wifi_password);
+ 
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+ 
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+ 
+// connect to the mosquitto server
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+
+    if (client.connect("ESP8266Client")) {
+ 
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+ 
+// publish the temperature and humidity
+void publishTempHumid() {
+    client.publish(temperature_topic, String(t).c_str(), true);
+    client.publish(humidity_topic, String(h).c_str(), true);
+}
+ 
+// Update the humidity and temperature variables
+void updateTempHumid() {
+  // Reading temperature or humidity takes about 250 milliseconds!
+  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+  h = dht.readHumidity();
+  // Read temperature as Celsius
+  t = dht.readTemperature();
+
+    // Check if any reads failed and exit early (to try again).
+  if (isnan(h) || isnan(t)){
+    Serial.println("Failed DHT");
+    return;
+  }
+}
+ 
+void setup(){
+ 
+  Serial.begin(9600);
+  while(!Serial) {;}
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+ 
+  dht.begin(); // initialize dht
+  
+}
+ 
+// this method keeps getting called repeatedly. 
+// every loop we should update the humidity and temperature variables
+// and then send them to serial
+void loop(){
+ 
+  // keep trying to connect to the mqtt server
+  if (!client.connected()) 
+  {
+    reconnect();
+  }
+  client.loop();
+ 
+  // update the temperature and humidity
+  updateTempHumid();
+ 
+  // publish the temperature and humidity
+  publishTempHumid();
+  // wait some time
+  delay(sleepTime * 1000);
+}
+
